@@ -1,0 +1,8 @@
+{
+  "packages": [
+    "npm:gentle-pi",
+    "npm:@dietrichgebert/ponytail"
+  ],
+  "defaultProvider": "nan",
+  "defaultModel": "glm5.3-flash"
+}
