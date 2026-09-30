@@ -4,7 +4,7 @@ Plantilla lista para copiar en cualquier proyecto: [Pi](https://pi.dev) (harness
 agente) + [Gentle Shell](https://github.com/Gentleman-Programming/gentle-pi)
 (paquete npm `gentle-pi`) + [Ponytail](https://github.com/DietrichGebert/ponytail)
 + el cluster de modelos de [NaN Builders](https://nan.builders/docs/pi),
-**todo con alcance de proyecto** (`.pi/`), sin tocar la configuración global de Pi
+**con el runtime de Gentle Agents aislado por proyecto** (`.pi/`), sin mover la configuración global de Pi
 ni dejar la API key en ningún archivo.
 
 ---
@@ -98,6 +98,7 @@ pi
 | Archivo | Qué hace |
 |---|---|
 | `.pi/settings.json` | Declara `npm:gentle-pi` y `npm:@dietrichgebert/ponytail` como paquetes **de proyecto**; fija `defaultProvider: "nan"` y `defaultModel: "glm5.3-flash"`. Se puede commitear (no contiene secretos). |
+| `.pi/extensions/project-isolation.js` | Antes de cargar `gentle-pi`, fija `GENTLE_PI_AGENT_HOME` a `.pi/gentle-agent-home/`. Así `orchestrator_list`/`orchestrator_send_message` solo descubren sesiones del mismo proyecto. No cambia `PI_CODING_AGENT_DIR`, por lo que auth/settings/packages de Pi siguen siendo globales. |
 | `.pi/extensions/nan-provider.ts` | `pi.registerProvider("nan", {...})` con `baseUrl: https://api.nan.builders/v1`, `api: "openai-completions"` y los 7 modelos del cluster. Se carga solo tras project-trust. |
 | `.pi/npm/` | Lo crea Pi al instalar. Está gitignored; no se copia entre proyectos (Pi lo regenera). |
 
@@ -124,7 +125,24 @@ Cambiar de modelo dentro de Pi: `/model` (o `pi --model nan/deepseek-v4-flash`).
 Cambiar el default: edita `defaultModel` en `.pi/settings.json` o
 `/model` → Ctrl+S.
 
-## 7. Cómo conviven Gentle Shell y Ponytail
+
+## 7. Aislamiento entre proyectos
+
+`gentle-pi` publica las sesiones de `orchestrator_*` dentro de su `GENTLE_PI_AGENT_HOME`. Si se deja el valor por defecto (`~/.pi/agent`), dos terminales abiertas en repositorios distintos comparten el mismo registro local y pueden descubrirse entre sí.
+
+La plantilla evita ese cruce mediante `.pi/extensions/project-isolation.js`, que se carga antes que las extensiones de paquetes y fija:
+
+```text
+GENTLE_PI_AGENT_HOME=<project>/.pi/gentle-agent-home
+```
+
+Solo se aísla Gentle Agents. `PI_CODING_AGENT_DIR` no se modifica, por lo que las credenciales, paquetes y settings normales de Pi conservan su ubicación habitual. En el primer uso se copian, sin sobrescribir archivos locales existentes, las definiciones globales de `agents/`, `subagents/` y `subagents.json` para no perder los agentes ya disponibles.
+
+El runtime aislado está en `.gitignore`. Para permitir deliberadamente descubrimiento entre proyectos, arranca Pi con `PI_NAN_ALLOW_SHARED_GENTLE_HOME=1`.
+
+Comprobación recomendada: abre Pi en dos repositorios distintos que usen esta plantilla y ejecuta `orchestrator_list` en ambos. Cada uno debe dejar de anunciar la sesión del otro. Cierra primero las sesiones antiguas que se iniciaron con el perfil global.
+
+## 8. Cómo conviven Gentle Shell y Ponytail
 
 Ambos inyectan texto al system prompt en `before_agent_start` de forma
 **aditiva** — no se sobrescriben, pero conviene tener clara la precedencia:
@@ -147,7 +165,7 @@ Ambos inyectan texto al system prompt en `before_agent_start` de forma
 **No instales `pi-subagents-j0k3r`**: gentle-pi ≥ 3.x ya trae subagentes
 nativos con los mismos tool names — instalarlo duplicaría las tools.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Síntoma | Causa | Fix |
 |---|---|---|
@@ -158,8 +176,9 @@ nativos con los mismos tool names — instalarlo duplicaría las tools.
 | `mimo-v2.6-flash` no "oye" audio | Pi solo declara inputs `text`/`image` | limitación conocida, el audio va por API directa |
 | respuestas cortadas | `maxTokens` es el techo de salida (incluye reasoning) | el reasoning consume ese presupuesto |
 | Windows: el env var "no existe" en Pi | `setx` solo aplica a terminales **nuevas** | abre otra terminal / `refreshenv` |
+| dos proyectos aparecen en `orchestrator_list` | instalación antigua sin aislamiento o `PI_NAN_ALLOW_SHARED_GENTLE_HOME=1` | actualiza la `.pi/` del proyecto, cierra las sesiones antiguas y vuelve a abrir `pi` |
 
-## 9. Actualizar
+## 10. Actualizar
 
 ```bash
 pi update --all            # paquetes + pi
@@ -170,7 +189,7 @@ Las versiones en `settings.json` van sin pin (`npm:gentle-pi` = última). Para
 congelar: `npm:gentle-pi@3.7.0`, `npm:@dietrichgebert/ponytail@4.10.0` —
 las specs pineadas no se actualizan con `pi update`.
 
-## 10. Seguridad
+## 11. Seguridad
 
 - Nunca commitees la API key. La plantilla usa `$NAN_BUILDERS_API_KEY`;
   verifica con `git diff --cached` antes de commitear `.pi/` en un proyecto.
@@ -179,7 +198,7 @@ las specs pineadas no se actualizan con `pi update`.
 - `pi auth check` / `pi auth print-api-key` existen para depurar credenciales;
   no pegues su salida en issues o commits.
 
-## 11. Reutilizar en otro proyecto — resumen
+## 12. Reutilizar en otro proyecto — resumen
 
 ```text
 1. npm i -g @earendil-works/pi-coding-agent@latest   (si hace falta)

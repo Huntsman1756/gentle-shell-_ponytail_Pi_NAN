@@ -24,7 +24,7 @@ echo "Copied .pi -> $TARGET"
 
 GITIGNORE="$TARGET/.gitignore"
 touch "$GITIGNORE"
-for entry in '.pi/npm/*' '!.pi/npm/.gitignore' '.atl/'; do
+for entry in '.pi/npm/*' '!.pi/npm/.gitignore' '.pi/gentle-agent-home/' '.atl/'; do
   grep -qxF "$entry" "$GITIGNORE" || echo "$entry" >> "$GITIGNORE"
 done
 

@@ -44,7 +44,7 @@ Write-Host "Copied .pi -> $Target"
 
 # Root .gitignore entries so Pi runtime state never gets committed.
 $gitignore = Join-Path $Target '.gitignore'
-$entries = @('.pi/npm/*', '!.pi/npm/.gitignore', '.atl/')
+$entries = @('.pi/npm/*', '!.pi/npm/.gitignore', '.pi/gentle-agent-home/', '.atl/')
 $existing = if (Test-Path $gitignore) { Get-Content $gitignore } else { @() }
 $missing = $entries | Where-Object { $existing -notcontains $_ }
 if ($missing) {

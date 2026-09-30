@@ -1,3 +1,4 @@
 .pi/npm/*
 !.pi/npm/.gitignore
+.pi/gentle-agent-home/
 .atl/
