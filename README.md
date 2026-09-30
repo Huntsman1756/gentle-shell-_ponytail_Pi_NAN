@@ -90,8 +90,9 @@ pi
 .pi/
 ├── settings.json                # paquetes Pi + defaultProvider/defaultModel
 ├── extensions/
-│   └── nan-provider.ts          # registra el provider "nan" leyendo
-│                                #   $NAN_BUILDERS_API_KEY (sin secretos)
+│   ├── project-isolation.js      # aísla Gentle Agents/orchestrator por proyecto
+│   └── nan-provider.ts           # registra el provider "nan" leyendo
+│                                 #   $NAN_BUILDERS_API_KEY (sin secretos)
 └── npm/.gitignore               # ignora los paquetes instalados
 ```
 
