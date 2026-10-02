@@ -2,3 +2,8 @@
 !.pi/npm/.gitignore
 .pi/gentle-agent-home/
 .atl/
+.tmp/
+.pi/template-backups/
+.pi/stack-runtime/
+.pi/stack-launcher/
+.pi/bin/

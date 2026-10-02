@@ -1,216 +1,146 @@
-# Pi + Gentle Shell + Ponytail + NaN — stack project-local
+# Pi + Gentle Shell + Ponytail + NaN
 
-Plantilla lista para copiar en cualquier proyecto: [Pi](https://pi.dev) (harness de
-agente) + [Gentle Shell](https://github.com/Gentleman-Programming/gentle-pi)
-(paquete npm `gentle-pi`) + [Ponytail](https://github.com/DietrichGebert/ponytail)
-+ el cluster de modelos de [NaN Builders](https://nan.builders/docs/pi),
-**con el runtime de Gentle Agents aislado por proyecto** (`.pi/`), sin mover la configuración global de Pi
-ni dejar la API key en ningún archivo.
+Project-local stack: **Pi 1.0.0**, **Gentle Shell 4.0.0**, its bundled **Gentle
+AI 4.0.0**, and **Ponytail 4.10.1**. Requires **Node.js >=22.19.0**. The reviewed
+baseline is `stack-versions.json`.
 
----
+## Why the template was behind
 
-## 1. Requisitos
+The previous template documented Pi 0.87.1/Gentle Shell 3.7 and declared unpinned
+packages. Upstream releases do not update a template or already installed files.
+Gentle AI is installed separately inside Gentle Shell: updating a system binary
+does not update that package-local review runtime.
 
-| Pieza | Versión | Notas |
-|---|---|---|
-| Node.js + npm | cualquier LTS reciente | Pi se instala por npm |
-| Pi | `>= 0.85.1` | `npm i -g @earendil-works/pi-coding-agent@latest` — gentle-pi 3.7 lo exige |
-| Cuenta NaN | — | API key (`sk-...`) desde https://cloud.nan.builders |
+[Gentle AI 4](https://github.com/Gentleman-Programming/gentle-ai/releases/tag/v4.0.0)
+uses `/v4`, retires SDD/OpenSpec in favor of ODD and moves Pi to built-in MCP.
+[Pi 1.0](https://github.com/earendil-works/pi/releases/tag/v1.0.0) is the new
+stable harness. Gentle Shell 4 owns NaN authentication and its model catalog;
+this template no longer registers a competing provider or guesses model limits.
 
-## 2. Quickstart
+## Install or upgrade
 
-### Opción A — una línea (no hace falta clonar)
+Clone this repository, inspect it, then install into an existing project.
 
-**Windows (PowerShell):**
+Windows:
+
 ```powershell
-cd <tu-proyecto>
-irm https://raw.githubusercontent.com/Huntsman1756/gentle-shell-_ponytail_Pi_NAN/main/install.ps1 | iex
-```
-
-**macOS / Linux / Git Bash:**
-```bash
-cd <tu-proyecto>
-curl -fsSL https://raw.githubusercontent.com/Huntsman1756/gentle-shell-_ponytail_Pi_NAN/main/install.sh | bash
-```
-
-El script copia `.pi/` al proyecto y añade las entradas de runtime al `.gitignore`.
-
-### Opción B — manual
-
-```bash
-git clone https://github.com/Huntsman1756/gentle-shell-_ponytail_Pi_NAN.git
-cp -r gentle-shell-_ponytail_Pi_NAN/.pi <tu-proyecto>/
-```
-
-### 3. La API key (una vez por máquina)
-
-El provider lee la key de la variable de entorno `NAN_BUILDERS_API_KEY`
-(interpolación `$ENV_VAR` de Pi — la key **nunca** está en el repo).
-
-**Windows (persistente):**
-```powershell
-setx NAN_BUILDERS_API_KEY "sk-tu-key"
-# abre una terminal NUEVA después de setx
-```
-
-**bash/zsh (persistente):**
-```bash
-echo 'export NAN_BUILDERS_API_KEY="sk-tu-key"' >> ~/.bashrc   # o ~/.zshrc
-```
-
-**Solo esta sesión:** `$env:NAN_BUILDERS_API_KEY="sk-..."` (PowerShell) o
-`export NAN_BUILDERS_API_KEY="sk-..."` (bash).
-
-### 4. Primer arranque
-
-```bash
-cd <tu-proyecto>
+.\install.ps1 -Target 'F:\path\to\project'
+cd 'F:\path\to\project'
+. .\.pi\bin\activate.ps1
+pi --stack-check
 pi
 ```
 
-1. Pi detecta `.pi/` y pide **project trust** una vez (Enter para confiar).
-2. Tras el trust, Pi **instala automáticamente** los paquetes declarados en
-   `.pi/settings.json` (`gentle-pi` + `ponytail`) bajo `.pi/npm/`.
-3. Si tu npm tiene política `allow-scripts`, el postinstall de `gentle-pi`
-   quedará bloqueado. Ejecútalo a mano una vez (instala el binario nativo
-   `gentle-ai` que usan las reviews):
-   ```bash
-   node .pi/npm/node_modules/gentle-pi/scripts/install-gentle-ai.mjs
-   ```
-4. Smoke test:
-   ```bash
-   pi -p "responde solo: READY"
-   ```
-
----
-
-## 5. Qué contiene la plantilla
-
-```
-.pi/
-├── settings.json                # paquetes Pi + defaultProvider/defaultModel
-├── extensions/
-│   ├── project-isolation.js      # aísla Gentle Agents/orchestrator por proyecto
-│   └── nan-provider.ts           # registra el provider "nan" leyendo
-│                                 #   $NAN_BUILDERS_API_KEY (sin secretos)
-└── npm/.gitignore               # ignora los paquetes instalados
-```
-
-| Archivo | Qué hace |
-|---|---|
-| `.pi/settings.json` | Declara `npm:gentle-pi` y `npm:@dietrichgebert/ponytail` como paquetes **de proyecto**; fija `defaultProvider: "nan"` y `defaultModel: "glm5.3-flash"`. Se puede commitear (no contiene secretos). |
-| `.pi/extensions/project-isolation.js` | Antes de cargar `gentle-pi`, fija `GENTLE_PI_AGENT_HOME` a `.pi/gentle-agent-home/`. Así `orchestrator_list`/`orchestrator_send_message` solo descubren sesiones del mismo proyecto. No cambia `PI_CODING_AGENT_DIR`, por lo que auth/settings/packages de Pi siguen siendo globales. |
-| `.pi/extensions/nan-provider.ts` | `pi.registerProvider("nan", {...})` con `baseUrl: https://api.nan.builders/v1`, `api: "openai-completions"` y los 7 modelos del cluster. Se carga solo tras project-trust. |
-| `.pi/npm/` | Lo crea Pi al instalar. Está gitignored; no se copia entre proyectos (Pi lo regenera). |
-
-> ¿Por qué una extensión y no `models.json`? Pi solo lee `models.json` del
-> directorio global `~/.pi/agent/` — no existe `models.json` por proyecto.
-> La extensión de proyecto es el mecanismo oficial para declarar providers
-> con alcance local (`.pi/extensions/`). Si prefieres NaN **global** para
-> todos tus proyectos, copia el bloque de provider a `~/.pi/agent/models.json`
-> siguiendo https://nan.builders/docs/pi.
-
-## 6. Modelos NaN disponibles
-
-| id | Uso recomendado | Contexto | Notas |
-|---|---|---|---|
-| `glm5.3-flash` | **coding** (default aquí) | 1M | MIT, cuota 2B tokens/mes |
-| `deepseek-v4-flash` | uso general, mayor cuota | 1M | visión, reasoning adaptativo |
-| `qwen3.8-flash` | ligero/multimodal | 262K | tool calling XML |
-| `mimo-v2.6-flash` | omnimodal | 1M | audio no llega desde Pi |
-| `gemma4` | ligero | 262K | reasoning ajustable |
-| `qwen3.6` | legado | 262K | mantenido por compatibilidad |
-| `glm5.3` | premium | 1M | requiere tier premium → `401` sin él |
-
-Cambiar de modelo dentro de Pi: `/model` (o `pi --model nan/deepseek-v4-flash`).
-Cambiar el default: edita `defaultModel` en `.pi/settings.json` o
-`/model` → Ctrl+S.
-
-
-## 7. Aislamiento entre proyectos
-
-`gentle-pi` publica las sesiones de `orchestrator_*` dentro de su `GENTLE_PI_AGENT_HOME`. Si se deja el valor por defecto (`~/.pi/agent`), dos terminales abiertas en repositorios distintos comparten el mismo registro local y pueden descubrirse entre sí.
-
-La plantilla evita ese cruce mediante `.pi/extensions/project-isolation.js`, que se carga antes que las extensiones de paquetes y fija:
-
-```text
-GENTLE_PI_AGENT_HOME=<project>/.pi/gentle-agent-home
-```
-
-Solo se aísla Gentle Agents. `PI_CODING_AGENT_DIR` no se modifica, por lo que las credenciales, paquetes y settings normales de Pi conservan su ubicación habitual. En el primer uso se copian, sin sobrescribir archivos locales existentes, las definiciones globales de `agents/`, `subagents/` y `subagents.json` para no perder los agentes ya disponibles.
-
-El runtime aislado está en `.gitignore`. Para permitir deliberadamente descubrimiento entre proyectos, arranca Pi con `PI_NAN_ALLOW_SHARED_GENTLE_HOME=1`.
-
-Comprobación recomendada: abre Pi en dos repositorios distintos que usen esta plantilla y ejecuta `orchestrator_list` en ambos. Cada uno debe dejar de anunciar la sesión del otro. Cierra primero las sesiones antiguas que se iniciaron con el perfil global.
-
-## 8. Cómo conviven Gentle Shell y Ponytail
-
-Ambos inyectan texto al system prompt en `before_agent_start` de forma
-**aditiva** — no se sobrescriben, pero conviene tener clara la precedencia:
-
-1. **Las reglas del proyecto** (`AGENTS.md` del repo, si existe) mandan sobre
-   gates, tests y forma de trabajo.
-2. **Ponytail** aplica su filosofía "lazy senior dev" (diff mínimo, reusar
-   antes de escribir, sin abstracciones no pedidas). Modo por defecto: `full`.
-   - `/ponytail off|lite|full|ultra` cambia el modo de la sesión.
-   - `/ponytail status` muestra el modo; `/ponytail default <modo>` fija el
-     default **global** (`%APPDATA%\ponytail\config.json` o
-     `~/.config/ponytail/config.json`; también `PONYTAIL_DEFAULT_MODE`).
-   - Escribir "normal mode" / "stop ponytail" lo desactiva en la sesión.
-   - Skills: `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`,
-     `/ponytail-gain`, `/ponytail-help`.
-3. **Gentle Shell** aporta la UI, la persona Gentleman, el workflow ODD
-   (SDD/OpenSpec solo si lo pides explícitamente), los **subagentes nativos**
-   `gentle-agents` y el binario `gentle-ai` para reviews.
-
-**No instales `pi-subagents-j0k3r`**: gentle-pi ≥ 3.x ya trae subagentes
-nativos con los mismos tool names — instalarlo duplicaría las tools.
-
-## 9. Troubleshooting
-
-| Síntoma | Causa | Fix |
-|---|---|---|
-| `401` | sin `defaultProvider`/`defaultModel`, key ausente o modelo premium | revisa `.pi/settings.json`, `echo $env:NAN_BUILDERS_API_KEY`, evita `glm5.3` sin tier |
-| "Project is not trusted" | primer uso de `.pi/` en esa carpeta | acepta el prompt de trust, o `pi --approve` en modo no interactivo |
-| reviews nativas fallan (`package-local-binary-missing`) | postinstall de gentle-pi bloqueado por npm | `node .pi/npm/node_modules/gentle-pi/scripts/install-gentle-ai.mjs` |
-| `pi auth check --provider nan` dice `not_ready` | normal: no hay credencial *guardada*, la key vive en el env var | ignorar; la prueba real es `pi -p "..."` |
-| `mimo-v2.6-flash` no "oye" audio | Pi solo declara inputs `text`/`image` | limitación conocida, el audio va por API directa |
-| respuestas cortadas | `maxTokens` es el techo de salida (incluye reasoning) | el reasoning consume ese presupuesto |
-| Windows: el env var "no existe" en Pi | `setx` solo aplica a terminales **nuevas** | abre otra terminal / `refreshenv` |
-| dos proyectos aparecen en `orchestrator_list` | instalación antigua sin aislamiento o `PI_NAN_ALLOW_SHARED_GENTLE_HOME=1` | actualiza la `.pi/` del proyecto, cierra las sesiones antiguas y vuelve a abrir `pi` |
-
-## 10. Actualizar
+macOS/Linux/Git Bash:
 
 ```bash
-pi update --all            # paquetes + pi
-pi update npm:gentle-pi    # un paquete concreto
+bash ./install.sh /path/to/project
+cd /path/to/project
+source .pi/bin/activate.sh
+pi --stack-check
+pi
 ```
 
-Las versiones en `settings.json` van sin pin (`npm:gentle-pi` = última). Para
-congelar: `npm:gentle-pi@3.7.0`, `npm:@dietrichgebert/ponytail@4.10.0` —
-las specs pineadas no se actualizan con `pi update`.
+Activation defines `pi` in that terminal. Each call finds the managed launcher
+in the current project or a parent; unrelated projects use the normal Pi binary.
+**Without activation, global `pi` bypasses the template's update checks.**
 
-## 11. Seguridad
+For persistent Windows activation, pass `-RegisterShell` to `install.ps1`.
+This explicit option appends a dot-source line to that PowerShell profile;
+it does not replace it. PowerShell 7 and Windows PowerShell have separate
+profiles. On Bash/Zsh, add `source /absolute/project/.pi/bin/activate.sh` to your
+own profile. Keep that project available or update the line after moving it.
 
-- Nunca commitees la API key. La plantilla usa `$NAN_BUILDERS_API_KEY`;
-  verifica con `git diff --cached` antes de commitear `.pi/` en un proyecto.
-- Las extensiones de proyecto ejecutan código local tras el trust — revisa
-  `.pi/extensions/` antes de confiar una carpeta.
-- `pi auth check` / `pi auth print-api-key` existen para depurar credenciales;
-  no pegues su salida en issues o commits.
+Remote install is supported; activate afterwards as above:
 
-## 12. Reutilizar en otro proyecto — resumen
+```powershell
+irm https://raw.githubusercontent.com/Huntsman1756/gentle-shell-_ponytail_Pi_NAN/main/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Huntsman1756/gentle-shell-_ponytail_Pi_NAN/main/install.sh | bash
+```
+
+The installer merges managed package versions, preserves custom models/providers,
+package filters and unrelated packages, and backs up changed managed files in
+`.pi/template-backups/`. It does not copy installed runtime trees, overwrite MCP
+or credential files, grant project trust or invoke models.
+
+## Controlled updates on every launch
+
+The launcher queries the npm stable releases for Pi, Gentle Shell and Ponytail.
+
+1. Forward **patch** releases in each approved major/minor line are automatic.
+   `4.0.0 -> 4.0.1` is eligible; `4.1.0`, `5.0.0`, prereleases and downgrades are
+   held. The bundled native Gentle AI must also stay in its approved major/minor.
+   A new reviewed template baseline can approve a wider upgrade.
+2. Exact versions install in staging with an npm integrity lockfile and strict
+   engine requirements. General lifecycle scripts are disabled. Only Gentle's
+   native installer API runs, verifying its upstream release/build provenance.
+   Windows requires local **Go >=1.25.10** for that source build. First setup may
+   take several minutes. Transient native EPERM/EBUSY failures get bounded retries.
+3. Probes check package identities, Pi version and actual SDK extension loading
+   for Gentle Shell, Ponytail and the environment bridge. This sandbox is offline,
+   uses no real credentials and performs **zero inference requests**.
+4. A complete runtime is published into its own version directory. Project
+   declarations point to it. Already loaded versions are never overwritten.
+   This intentionally changes `.pi/settings.json`; inspect its diff before
+   committing your project. Custom package filters remain intact.
+5. Failed checks do not promote a candidate. Discovery/install failure retains
+   the published runtime; first setup fails explicitly if there is no fallback.
+   The previous version stays available for rollback.
+6. A project lock prevents concurrent updates and new launches during publication.
+   A second launch reports that it must retry after the update finishes.
+   Version/extension/native-integrity probes also run
+   before an offline launch. No global Pi configuration is rewritten.
 
 ```text
-1. npm i -g @earendil-works/pi-coding-agent@latest   (si hace falta)
-2. setx NAN_BUILDERS_API_KEY "sk-..."                (una vez por máquina)
-3. cd proyecto && irm .../install.ps1 | iex          (o copia .pi/ a mano)
-4. pi  →  aceptar trust  →  packages se instalan solos
-5. node .pi/npm/node_modules/gentle-pi/scripts/install-gentle-ai.mjs
-   (solo si npm bloqueó el postinstall)
-6. pi -p "READY"                                     (smoke test)
+pi --stack-check          Check/install without launching a model session
+pi --offline              Use the installed runtime without registry checks
+pi --stack-rollback       Restore the previous runtime without launching
+pi --stack-retry --stack-check   Re-test a combination held after rollback
 ```
 
----
+`PI_STACK_OFFLINE=1` skips update discovery; use Pi's own `--offline` as well to
+suppress its catalog refreshes. After a crashed installer, inspect the recorded
+PID in `.pi/stack-runtime/update.lock/owner.json` before removing that one lock
+directory. Never remove a live installer's lock. For approved major/minor
+updates, inspect a newer template, reinstall its launcher and run the check.
 
-Stack probado con Pi 0.87.1, gentle-pi 3.7.0, ponytail 4.10.0 (2026-09).
+Patch gating reduces exposure; it does **not** guarantee upstream is regression
+free. Probes do not establish live provider access, interactive rendering or
+completed formal review. Rollback restores package paths/version selection,
+not sessions, user data, all settings or credentials.
+
+## NaN, isolation and MCP
+
+Use native `/login nan` or `NAN_API_KEY`. The original `NAN_BUILDERS_API_KEY`
+remains compatible: the bridge forwards it only in the current process when
+`NAN_API_KEY` is absent. Native saved credentials retain their precedence.
+Never commit, print or paste keys. The fallback model catalog does not prove
+account access, price or quota. Upgrading does not switch your selected model.
+
+Gentle discovery remains project-isolated with `GENTLE_PI_AGENT_HOME`. The
+ordinary Pi auth/settings directory is unchanged. The deliberate opt-out
+`PI_NAN_ALLOW_SHARED_GENTLE_HOME=1` permits shared discovery. Project/user
+instructions still govern publication, delegation and review authorization.
+
+Pi reads trusted project servers from `.pi/mcp.json` and personal servers from
+`~/.pi/agent/mcp.json`. Do not install `pi-mcp-adapter`: its `/mcp` extension
+overrides native MCP. This template does not delete global packages or invent
+server configurations. Inspect `pi list` and remove an old adapter declaration
+in its actual scope, retaining its configuration until migration is verified.
+See [Pi MCP](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/mcp.md)
+and Gentle AI's scoped sync/migration release notes.
+
+## Verify
+
+```bash
+npm test
+node scripts/smoke-runtime.mjs /path/to/test-bundle /path/to/project
+```
+
+Tests cover merge/backup/idempotency, invalid inputs, update policy, failures,
+legacy environment compatibility and both installers. Windows/Linux CI is
+configured. Actual execution and limitations belong in
+[verification evidence](docs/verification.md), separately from hosted CI.
