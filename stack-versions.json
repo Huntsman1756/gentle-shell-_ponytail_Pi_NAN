@@ -1,0 +1,9 @@
+{
+  "templateVersion": "4.0.0",
+  "nodeMinimum": "22.19.0",
+  "pi": "1.0.0",
+  "gentlePi": "4.0.0",
+  "gentleAi": "4.0.0",
+  "ponytail": "4.10.1",
+  "gentleAiSourceCommit": "ff77164d4f56f1665b22fb6fac51c2ccbb769400"
+}
