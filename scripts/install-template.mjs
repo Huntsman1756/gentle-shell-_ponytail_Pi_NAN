@@ -14,7 +14,7 @@ export function installTemplate(target, source = resolve(dirname(fileURLToPath(i
 	const managed = [".pi/settings.json", ...Object.keys(sources), ".gitignore"];
 	for (const path of [".pi", ".pi/extensions", ".pi/npm", ".pi/bin", ".pi/stack-launcher", ".pi/template-backups", ...managed]) {
 		const destination = join(target, path);
-		if (existsSync(destination) && lstatSync(destination).isSymbolicLink()) throw new Error(`Managed path is a symlink: ${path}`);
+		if (lstatSync(destination, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`Managed path is a symlink: ${path}`);
 	}
 	const template = JSON.parse(readFileSync(join(source, ".pi/settings.json"), "utf8"));
 	const settingsPath = join(target, ".pi/settings.json");

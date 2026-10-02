@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +56,13 @@ test("duplicate declarations fail without silently selecting one", () => tempora
 	writeFileSync(join(target, ".pi/settings.json"), JSON.stringify({ packages: ["npm:gentle-pi", "npm:gentle-pi@3.7.0"] }));
 	assert.throws(() => installTemplate(target), /Duplicate managed/);
 	assert(!existsSync(join(target, ".pi/extensions")));
+}));
+test("a dangling managed directory link fails before installation", () => temporary(target => {
+	mkdirSync(join(target, ".pi"));
+	symlinkSync(join(target, "missing-link-target"), join(target, ".pi/extensions"), process.platform === "win32" ? "junction" : "dir");
+	assert.throws(() => installTemplate(target), /Managed path is a symlink/);
+	assert(!existsSync(join(target, ".pi/settings.json")));
+	assert(!existsSync(join(target, "missing-link-target")));
 }));
 test("only forward patch releases are automatically selected", () => {
 	assert.equal(selectPatch("4.0.0", "4.0.1"), "4.0.1");

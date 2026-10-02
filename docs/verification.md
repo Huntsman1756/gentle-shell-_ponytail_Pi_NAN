@@ -6,7 +6,7 @@ credential probes, subagents or formal native reviews were executed.
 
 | Check | Executed result |
 | --- | --- |
-| `npm test` | 13 passed, zero failures/skips |
+| `npm test` | 14 passed, zero failures/skips |
 | PowerShell installer | Real temporary path containing spaces; configuration installed |
 | Git Bash installer | Real temporary path containing spaces; configuration installed |
 | Merge/reinstall | Custom model/provider/filter preserved; backups; idempotency; activated runtime paths not duplicated |
@@ -44,7 +44,9 @@ descriptor, restoring it on completion. Never run it against a live project.
 Known limits:
 
 - Local execution does not establish macOS/Linux runtime installation or a
-  hosted Windows/Linux CI result. CI is configured separately.
+  hosted runtime installation. The [first hosted matrix](https://github.com/Huntsman1756/gentle-shell-_ponytail_Pi_NAN/actions/runs/37067396719)
+  passed all four Windows/Ubuntu Node 22/24 template-test jobs on `d817050`;
+  this is separate from the local Windows runtime acceptance.
 - No live NaN request, full interactive TUI or actual formal review was tested.
 - Native provenance checks trust the upstream verified installer; npm integrity
   and smoke checks do not prove that arbitrary upstream code is safe or bug-free.

@@ -15,7 +15,7 @@ files and back up managed changes. Activate the local `pi` function once per
 shell; opt into PowerShell profile registration with `-RegisterShell` to make it
 persistent. An unactivated global Pi bypasses these checks.
 
-Local verification: 13 tests passed; actual Windows bootstrap and offline Pi
+Local verification: 14 tests passed; actual Windows bootstrap and offline Pi
 launch; 20 extensions loaded through the real SDK; native integrity/version
 probe; injected registry/install failures, competing lock refusal and synthetic
 rollback transaction. No LLM requests or formal reviews executed. See
