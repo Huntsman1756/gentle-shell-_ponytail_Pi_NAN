@@ -24,7 +24,7 @@ try {
 	const patch = join(sandbox, "patch.mjs");
 	const state = JSON.parse(original), versions = state.versions;
 	const nextPi = versions.pi.replace(/\d+$/, value => String(Number(value) + 1));
-	writeFileSync(patch, `const versions=${JSON.stringify({ "@earendil-works/pi-coding-agent": nextPi, "gentle-pi": versions.gentlePi, "@dietrichgebert/ponytail": versions.ponytail })};globalThis.fetch=async url=>{const name=decodeURIComponent(url.split('/').at(-2));return {ok:true,json:async()=>({name,version:versions[name],dist:{integrity:'synthetic'}})};};`);
+	writeFileSync(patch, `const versions=${JSON.stringify({ "@earendil-works/pi-coding-agent": nextPi, "gentle-pi": versions.gentlePi, "@dietrichgebert/ponytail": versions.ponytail })};globalThis.fetch=async url=>{const name=decodeURIComponent(url.split('/').at(-1)),version=versions[name];return {ok:true,json:async()=>({name,'dist-tags':{latest:version},versions:{[version]:{name,version,dist:{integrity:'synthetic'}}}})};};`);
 	const bin = join(sandbox, "bin"); mkdirSync(bin);
 	if (process.platform === "win32") {
 		writeFileSync(join(bin, "npm.cmd"), "@echo off\r\nexit /b 42\r\n");

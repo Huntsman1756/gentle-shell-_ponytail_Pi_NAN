@@ -4,11 +4,12 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { packages, discoverUpdates, parseVersion, approvedBaseline, assertNativeLine } from "./update-policy.mjs";
+import { packages, discoverUpdates, parseVersion, approvedBaseline, assertNativeLine, shouldCheckUpdates } from "./update-policy.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const home = join(root, ".pi/stack-runtime");
 const stateFile = join(home, "current.json");
+const checkFile = join(home, "update-check.json");
 const baseline = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "stack-versions.json"), "utf8"));
 const args = process.argv.slice(2);
 const offline = args.includes("--offline") || process.env.PI_STACK_OFFLINE === "1";
@@ -38,6 +39,10 @@ function loadState() {
 	for (const key of Object.keys(packages)) parseVersion(state.versions[key]);
 	if (!/^[a-f0-9]{20}$/.test(state.bundle)) throw new Error("Invalid runtime identity");
 	return state;
+}
+function loadLastCheck() {
+	try { return JSON.parse(readFileSync(checkFile, "utf8")); }
+	catch { return null; } // Missing or damaged cache must never suppress a check.
 }
 function atomicJson(path, value) {
 	const pending = `${path}.${process.pid}.pending`;
@@ -105,7 +110,10 @@ if (ownsLock) {
 			const restored = { ...current.previous, heldVersions: current.versions };
 			verifyBundle(join(home, "releases", restored.bundle), restored.versions);
 			pointSettings(restored); atomicJson(stateFile, restored); current = restored;
-		} else if (!offline) {
+		} else if (!offline && shouldCheckUpdates(loadLastCheck(), baseline, { installed: current, force: checkOnly || retryHeld })) {
+			// Persist attempts too, so registry/install failures do not delay every launch.
+			// Explicit checks, retries, first setup and changed baselines bypass this cache.
+			atomicJson(checkFile, { checkedAt: Date.now(), baseline });
 			const base = current ? approvedBaseline(current.versions, baseline) : baseline;
 			const { selected, pending } = await discoverUpdates(base);
 			for (const item of pending) console.error(`Update held for compatibility review: ${item.package} ${item.available} (current ${item.installed})`);

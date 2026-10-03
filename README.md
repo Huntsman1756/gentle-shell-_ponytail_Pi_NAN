@@ -66,11 +66,18 @@ package filters and unrelated packages, and backs up changed managed files in
 `.pi/template-backups/`. It does not copy installed runtime trees, overwrite MCP
 or credential files, grant project trust or invoke models.
 
-## Controlled updates on every launch
+## Controlled updates at launch
 
-The launcher queries the npm stable releases for Pi, Gentle Shell and Ponytail.
+The launcher queries npm for Pi, Gentle Shell and Ponytail on first setup and
+then at most once every six hours during normal launches. Failed attempts also
+start that interval, avoiding repeated network delays. `pi --stack-check` and
+`--stack-retry` force an immediate check; a changed template baseline does too.
+Offline mode always skips discovery. The interval is stored per project in
+`.pi/stack-runtime/update-check.json`; runtime probes still run on every launch.
 
 1. Forward **patch** releases in each approved major/minor line are automatic.
+   The highest nondeprecated stable patch in that line is selected from all
+   published versions, even when npm's `latest` points to a newer major/minor.
    `4.0.0 -> 4.0.1` is eligible; `4.1.0`, `5.0.0`, prereleases and downgrades are
    held. The bundled native Gentle AI must also stay in its approved major/minor.
    A new reviewed template baseline can approve a wider upgrade.
@@ -95,7 +102,7 @@ The launcher queries the npm stable releases for Pi, Gentle Shell and Ponytail.
    before an offline launch. No global Pi configuration is rewritten.
 
 ```text
-pi --stack-check          Check/install without launching a model session
+pi --stack-check          Force check/install without launching a model session
 pi --offline              Use the installed runtime without registry checks
 pi --stack-rollback       Restore the previous runtime without launching
 pi --stack-retry --stack-check   Re-test a combination held after rollback

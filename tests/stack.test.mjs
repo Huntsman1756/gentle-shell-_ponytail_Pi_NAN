@@ -3,10 +3,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { installTemplate } from "../scripts/install-template.mjs";
-import { approvedBaseline, assertNativeLine, discoverUpdates, parseVersion, selectPatch } from "../scripts/update-policy.mjs";
+import { approvedBaseline, assertNativeLine, discoverUpdates, parseVersion, selectPatch, shouldCheckUpdates, updateIntervalMs, packages } from "../scripts/update-policy.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 test("template pins agree with the reviewed baseline", () => {
@@ -77,25 +77,110 @@ test("a Shell patch cannot silently upgrade the native Gentle AI major/minor", (
 test("a newer reviewed template can approve a minor without downgrading installed patches", () => {
 	assert.deepEqual(approvedBaseline({ pi: "1.0.2", gentlePi: "4.0.1", ponytail: "4.10.1" }, { pi: "1.0.0", gentlePi: "4.1.0", ponytail: "4.10.2" }), { pi: "1.0.2", gentlePi: "4.1.0", ponytail: "4.10.2" });
 });
-test("registry checks all packages and retains incompatible upgrades as pending", async () => {
+function registryMetadata(name, latest, versions = [latest]) {
+	return { name, "dist-tags": { latest }, versions: Object.fromEntries(versions.map(version => [version, { name, version, dist: { integrity: "fixture" } }])) };
+}
+test("registry selects the highest compatible patch even when latest moves to another branch", async () => {
 	const calls = [];
 	const result = await discoverUpdates({ pi: "1.0.0", gentlePi: "4.0.0", ponytail: "4.10.1" }, async url => {
 		calls.push(url);
-		const name = decodeURIComponent(url.split("/").at(-2));
+		const name = decodeURIComponent(url.split("/").at(-1));
 		const version = { "@earendil-works/pi-coding-agent": "1.0.1", "gentle-pi": "4.1.0", "@dietrichgebert/ponytail": "4.10.2" }[name];
-		return { ok: true, json: async () => ({ name, version, dist: { integrity: "fixture" } }) };
+		const versions = name === "gentle-pi" ? ["4.0.2", "4.1.0", "4.0.1", "4.0.10", "4.0.11-beta.1", "3.9.9"] : [version];
+		return { ok: true, json: async () => registryMetadata(name, version, versions) };
 	});
 	assert.equal(calls.length, 3);
 	assert.equal(result.selected.pi, "1.0.1");
 	assert.equal(result.selected.ponytail, "4.10.2");
-	assert.equal(result.selected.gentlePi, "4.0.0");
+	assert.equal(result.selected.gentlePi, "4.0.10");
 	assert.equal(result.pending.length, 1);
+});
+test("deprecated patches are skipped and prerelease latest does not hide stable patches", async () => {
+	const current = { pi: "1.0.0", gentlePi: "4.0.0", ponytail: "4.10.1" };
+	const result = await discoverUpdates(current, async (url, options) => {
+		assert.equal(options.headers.Accept, "application/vnd.npm.install-v1+json");
+		const name = decodeURIComponent(url.split("/").at(-1));
+		const key = Object.keys(packages).find(key => packages[key] === name);
+		const metadata = registryMetadata(name, current[key]);
+		if (key === "gentlePi") {
+			Object.assign(metadata, registryMetadata(name, "5.0.0-beta.1", ["5.0.0-beta.1", "4.0.1", "4.0.2"]));
+			metadata.versions["4.0.2"].deprecated = "withdrawn";
+		}
+		return { ok: true, json: async () => metadata };
+	});
+	assert.equal(result.selected.gentlePi, "4.0.1");
+	assert.equal(result.pending[0].available, "5.0.0-beta.1");
 });
 test("bad registry identity and network errors do not return a candidate", async () => {
 	const current = { pi: "1.0.0", gentlePi: "4.0.0", ponytail: "4.10.1" };
 	await assert.rejects(discoverUpdates(current, async () => ({ ok: true, json: async () => ({ name: "wrong", version: "1.0.1", dist: { integrity: "fixture" } }) })));
 	await assert.rejects(discoverUpdates(current, async () => { throw new Error("offline"); }), /offline/);
+	await assert.rejects(discoverUpdates(current, async () => ({ ok: false, status: 503 })), /HTTP 503/);
+	const bad = registryMetadata(packages.pi, "2.0.0", ["2.0.0", "1.0.1"]);
+	delete bad.versions["1.0.1"].dist.integrity;
+	await assert.rejects(discoverUpdates(current, async () => ({ ok: true, json: async () => bad })), /Invalid registry metadata/);
 });
+test("automatic checks wait six hours but explicit checks and changed baselines bypass the cache", () => {
+	const baseline = { pi: "1.0.0", gentleAi: "4.0.0" }, checkedAt = 1000;
+	const cached = { checkedAt, baseline };
+	assert.equal(shouldCheckUpdates(cached, baseline, { installed: true, now: checkedAt + updateIntervalMs - 1 }), false);
+	assert.equal(shouldCheckUpdates(cached, baseline, { installed: true, now: checkedAt + updateIntervalMs }), true);
+	assert.equal(shouldCheckUpdates(cached, baseline, { installed: true, force: true, now: checkedAt }), true);
+	assert.equal(shouldCheckUpdates(cached, baseline, { installed: false, now: checkedAt }), true);
+	assert.equal(shouldCheckUpdates(cached, { ...baseline, gentleAi: "4.1.0" }, { installed: true, now: checkedAt }), true);
+	for (const cache of [null, {}, { checkedAt: "1000" }, { checkedAt: NaN }, { checkedAt: checkedAt + 1, baseline }]) {
+		assert.equal(shouldCheckUpdates(cache, baseline, { installed: true, now: checkedAt }), true);
+	}
+});
+test("launcher caches successful and failed attempts, forces checks and honors offline mode", () => temporary(target => {
+	installTemplate(target);
+	const baseline = JSON.parse(readFileSync(join(root, "stack-versions.json")));
+	const versions = Object.fromEntries(Object.keys(packages).map(key => [key, baseline[key]]));
+	const bundle = "0123456789abcdef0123", home = join(target, ".pi/stack-runtime");
+	for (const [key, name] of Object.entries(packages)) {
+		const directory = join(home, "releases", bundle, "node_modules", name);
+		mkdirSync(directory, { recursive: true });
+		writeFileSync(join(directory, "package.json"), JSON.stringify({ name, version: versions[key] }));
+	}
+	writeFileSync(join(home, "current.json"), JSON.stringify({ versions, bundle }));
+	const trace = join(target, "fetches.txt"), hook = join(target, "hook.mjs"), mode = join(target, "mode.txt");
+	writeFileSync(mode, "failure");
+	writeFileSync(hook, `import cp from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+import {appendFileSync,readFileSync} from 'node:fs';
+cp.spawnSync=(_command,args)=>({status:0,stdout:args.includes('--version')?'1.0.0':JSON.stringify({nativeAiVersion:'4.0.0'})});
+syncBuiltinESMExports();
+globalThis.fetch=async url=>{
+appendFileSync(${JSON.stringify(trace)},'attempt\\n');
+if(readFileSync(${JSON.stringify(mode)},'utf8')==='failure')throw new Error('synthetic registry failure');
+const name=decodeURIComponent(url.split('/').at(-1)),versions=${JSON.stringify(Object.fromEntries(Object.entries(packages).map(([key, name]) => [name, versions[key]])))},version=versions[name];
+return {ok:true,json:async()=>({name,'dist-tags':{latest:version},versions:{[version]:{name,version,dist:{integrity:'fixture'}}}})};
+};`);
+	const launcher = join(target, ".pi/stack-launcher/launch.mjs");
+	const invoke = args => {
+		const env = { ...process.env }; delete env.PI_STACK_OFFLINE;
+		const result = spawnSync(process.execPath, ["--import", pathToFileURL(hook).href, launcher, ...args], { cwd: target, env, encoding: "utf8", timeout: 10000 });
+		assert.equal(result.status, 0, result.stderr);
+		return result;
+	};
+	assert.match(invoke([]).stderr, /keeping the previous runtime/);
+	assert(!invoke([]).stderr.includes("synthetic registry failure"));
+	assert.equal(readFileSync(trace, "utf8").trim().split("\n").length, 1);
+	invoke(["--stack-check"]); invoke(["--stack-retry", "--stack-check"]);
+	assert.equal(readFileSync(trace, "utf8").trim().split("\n").length, 3);
+	invoke(["--offline", "--stack-check"]);
+	assert.equal(readFileSync(trace, "utf8").trim().split("\n").length, 3);
+	writeFileSync(join(home, "update-check.json"), "{broken");
+	invoke([]);
+	assert.equal(readFileSync(trace, "utf8").trim().split("\n").length, 4);
+	writeFileSync(join(home, "update-check.json"), JSON.stringify({ checkedAt: Date.now() - updateIntervalMs, baseline }));
+	invoke([]);
+	assert.equal(readFileSync(trace, "utf8").trim().split("\n").length, 5);
+	writeFileSync(mode, "success");
+	assert(!invoke(["--stack-check"]).stderr.includes("keeping the previous runtime"));
+	invoke([]);
+	assert.equal(readFileSync(trace, "utf8").trim().split("\n").length, 8);
+}));
 test("PowerShell installer works in a path containing spaces", { skip: process.platform !== "win32" }, () => temporary(parent => {
 	const target = join(parent, "project with spaces"); mkdirSync(target);
 	const result = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(root, "install.ps1"), "-Target", target], { encoding: "utf8" });

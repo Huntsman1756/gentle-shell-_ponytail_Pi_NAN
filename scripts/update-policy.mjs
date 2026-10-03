@@ -3,6 +3,13 @@ export const packages = {
 	gentlePi: "gentle-pi",
 	ponytail: "@dietrichgebert/ponytail",
 };
+export const updateIntervalMs = 6 * 60 * 60 * 1000;
+export function shouldCheckUpdates(lastCheck, baseline, { installed, force = false, now = Date.now() } = {}) {
+	if (!installed || force) return true;
+	if (!Number.isFinite(lastCheck?.checkedAt) || lastCheck.checkedAt > now) return true;
+	if (Object.keys(baseline).some(key => lastCheck.baseline?.[key] !== baseline[key])) return true;
+	return now - lastCheck.checkedAt >= updateIntervalMs;
+}
 export function parseVersion(value) {
 	const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);
 	if (!match) throw new Error("Only stable numeric releases are supported");
@@ -27,12 +34,23 @@ export function approvedBaseline(current, baseline) {
 export async function discoverUpdates(current, fetcher = fetch) {
 	const selected = { ...current }, pending = [];
 	for (const [key, name] of Object.entries(packages)) {
-		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`, { signal: AbortSignal.timeout(5000) });
+		const response = await fetcher(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
+			headers: { Accept: "application/vnd.npm.install-v1+json" }, signal: AbortSignal.timeout(5000),
+		});
 		if (!response.ok) throw new Error(`Registry lookup failed for ${name}: HTTP ${response.status}`);
 		const metadata = await response.json();
-		if (metadata.name !== name || !metadata.dist?.integrity) throw new Error(`Invalid registry metadata for ${name}`);
-		selected[key] = selectPatch(current[key], metadata.version);
-		if (selected[key] === current[key] && metadata.version !== current[key]) pending.push({ package: name, installed: current[key], available: metadata.version });
+		const latest = metadata["dist-tags"]?.latest;
+		if (metadata.name !== name || !metadata.versions || !metadata.versions[latest]?.dist?.integrity) throw new Error(`Invalid registry metadata for ${name}`);
+		parseVersion(current[key]);
+		for (const [version, release] of Object.entries(metadata.versions)) {
+			// Ignore prereleases and noncanonical versions; never select deprecated releases.
+			if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) || release.deprecated) continue;
+			if (selectPatch(selected[key], version) === selected[key]) continue;
+			if (release.name !== name || release.version !== version || !release.dist?.integrity) throw new Error(`Invalid registry metadata for ${name}@${version}`);
+			selected[key] = version;
+		}
+		const stableLatest = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(latest);
+		if (latest !== selected[key] && (!stableLatest || selectPatch(current[key], latest) === current[key])) pending.push({ package: name, installed: current[key], available: latest });
 	}
 	return { selected, pending };
 }

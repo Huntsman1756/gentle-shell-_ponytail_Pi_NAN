@@ -4,8 +4,10 @@ Upgrade the baseline to Pi 1.0.0, Gentle Shell/Gentle AI 4.0.0 and Ponytail 4.10
 Use Gentle Shell's native NaN provider; retain NAN_BUILDERS_API_KEY compatibility
 without duplicating registration or persisting secrets.
 
-The project launcher checks all three npm components before each startup. Stable
-patches are staged and probed before activation. Major/minor upgrades, including
+The project launcher checks all three npm components on first setup and every
+six hours at startup, with explicit checks available through `pi --stack-check`.
+Compatible stable patches are discovered even after npm's latest moves to another
+branch, then staged and probed before activation. Major/minor upgrades, including
 the bundled native Gentle AI, require a reviewed template baseline. The previous
 runtime is retained, failures do not promote candidates, and rollback holds the
 rejected combination until an explicit retry or a different combination appears.
